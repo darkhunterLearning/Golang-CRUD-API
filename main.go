@@ -14,7 +14,7 @@ import (
 const (
 	DB_USER     = "postgres"
 	DB_PASSWORD = "12345"
-	DB_NAME     = "movies"
+	DB_NAME     = "Customer"
 )
 
 // DB set up
@@ -27,15 +27,19 @@ func setupDB() *sql.DB {
 	return DB
 }
 
-type Movie struct {
-	MovieID   string `json:"movieid"`
-	MovieName string `json:"moviename"`
+type Customer struct {
+	CustomerID       int    `json:"id"`
+	CustomerUniqueId string `json:"unique_id"`
+	CustomerName     string `json:"customer_name"`
+	CustomerPhone    string `json:"customer_phone"`
+	CustomerAddress  string `json:"customer_address"`
+	CustomerPassword string `json:"customer_password"`
 }
 
 type JsonResponse struct {
-	Type    string  `json:"type"`
-	Data    []Movie `json:"data"`
-	Message string  `json:"message"`
+	Type    string     `json:"type"`
+	Data    []Customer `json:"data"`
+	Message string     `json:"message"`
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -51,17 +55,20 @@ func main() {
 
 	router.HandleFunc("/", homePage)
 
-	// Get all movies
-	router.HandleFunc("/movies/", ServeHTTP).Methods("GET")
+	// Get all customers
+	router.HandleFunc("/customers/", GetCustomers).Methods("GET")
 
-	// Create a movie
-	// router.HandleFunc("/movies/", CreateMovie).Methods("POST")
+	// Create a customer
+	router.HandleFunc("/customer/", CreateCustomer).Methods("POST")
 
-	// Delete a specific movie by the movieID
-	// router.HandleFunc("/movies/{movieid}", DeleteMovie).Methods("DELETE")
+	// Update a specific customer by the ID
+	router.HandleFunc("/customers/{id}", UpdateCustomer).Methods("PATCH")
 
-	// Delete all movies
-	// router.HandleFunc("/movies/", DeleteMovies).Methods("DELETE")
+	// Delete a specific customer by the ID
+	router.HandleFunc("/customers/{id}", DeleteCustomer).Methods("DELETE")
+
+	// Delete all customers
+	router.HandleFunc("/customers/", DeleteCustomers).Methods("DELETE")
 
 	// serve the app
 	fmt.Println("Server at 8000")
@@ -84,38 +91,141 @@ func checkErr(err error) {
 }
 
 // response and request handlers
-func GetMovies(w http.ResponseWriter, r *http.Request) {
+func GetCustomers(w http.ResponseWriter, r *http.Request) {
 	db := setupDB()
 
-	printMessage("Getting movies...")
+	printMessage("Getting customers...")
 
 	// Get all movies from movies table that don't have movieID = "1"
-	rows, err := db.Query("SELECT * FROM movies")
+	rows, err := db.Query("SELECT * FROM customer")
 
 	// check errors
 	checkErr(err)
 
 	// var response []JsonResponse
-	var movies []Movie
+	var customers []Customer
 
 	// Foreach movie
 	for rows.Next() {
-		var id int
-		var movieID string
-		var movieName string
+		var (
+			id               int
+			uniqueID         string
+			customerName     string
+			customerPhone    string
+			customerAddress  string
+			customerPassword string
+		)
 
-		err = rows.Scan(&id, &movieID, &movieName)
+		err = rows.Scan(&id, &uniqueID, &customerName, &customerPhone, &customerAddress, &customerPassword)
 
 		// check errors
 		checkErr(err)
 
-		movies = append(movies, Movie{MovieID: movieID, MovieName: movieName})
+		customers = append(customers, Customer{CustomerID: id, CustomerUniqueId: uniqueID, CustomerName: customerName, CustomerPhone: customerPhone,
+
+			CustomerAddress: customerAddress, CustomerPassword: customerPassword})
 	}
 
-	var response = JsonResponse{Type: "success", Data: movies}
+	var response = JsonResponse{Type: "success", Data: customers, Message: "200"}
 
 	json.NewEncoder(w).Encode(response)
 
+}
+
+func CreateCustomer(w http.ResponseWriter, r *http.Request) {
+	ID := r.FormValue("id")
+	Unique_Id := r.FormValue("unique_id")
+	Customer_Name := r.FormValue("customer_name")
+	Customer_Phone := r.FormValue("customer_phone")
+	Customer_Address := r.FormValue("customer_address")
+	Customer_Password := r.FormValue("customer_password")
+
+	var response = JsonResponse{}
+
+	if ID == "" || Customer_Name == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing ID or Customer_Name parameter."}
+	} else {
+		db := setupDB()
+
+		printMessage("Inserting customer into DB")
+
+		fmt.Println("Inserting new customer with ID: " + ID + " and name: " + Customer_Name)
+
+		var lastInsertID int
+		err := db.QueryRow("INSERT INTO customer(id, unique_id, customer_name, customer_phone, customer_address, customer_password) VALUES($1, $2, $3, $4, $5, $6) returning id;",
+			ID, Unique_Id, Customer_Name, Customer_Phone, Customer_Address, Customer_Password).Scan(&lastInsertID)
+
+		// check errors
+		checkErr(err)
+
+		response = JsonResponse{Type: "success", Message: "Customer has been inserted successfully!"}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func UpdateCustomer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	ID := vars["id"]
+	var response = JsonResponse{}
+
+	if ID == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing ID parameter."}
+	} else {
+		db := setupDB()
+		Unique_Id := r.FormValue("unique_id")
+		Customer_Name := r.FormValue("customer_name")
+		Customer_Phone := r.FormValue("customer_phone")
+		Customer_Address := r.FormValue("customer_address")
+		Customer_Password := r.FormValue("customer_password")
+
+		sqlUpdate := `
+		UPDATE customer
+		SET unique_id = $1, customer_name = $2, customer_phone = $3, customer_address = $4, customer_password = $5
+		WHERE id = $6;`
+		_, err := db.Exec(sqlUpdate, Unique_Id, Customer_Name, Customer_Phone, Customer_Address, Customer_Password, ID)
+
+		checkErr(err)
+
+		response = JsonResponse{Type: "success", Message: "Customer's Info has been updated successfully!"}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func DeleteCustomer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	ID := vars["id"]
+
+	var response = JsonResponse{}
+
+	if ID == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing ID parameter."}
+	} else {
+		db := setupDB()
+
+		printMessage("Deleting customer from DB")
+
+		_, err := db.Exec("DELETE FROM customer where id = $1", ID)
+
+		// check errors
+		checkErr(err)
+
+		response = JsonResponse{Type: "success", Message: "Customer has been deleted successfully!"}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func DeleteCustomers(w http.ResponseWriter, r *http.Request) {
+	db := setupDB()
+	printMessage("Deleting all customer!")
+	_, err := db.Exec("DELETE FROM customer")
+	checkErr(err)
+	printMessage("All customers have been deleted successfully")
+	var response = JsonResponse{Type: "success", Message: "All customers have been deleted successfully"}
+	json.NewEncoder(w).Encode(response)
 }
 
 func ServeHTTP(w http.ResponseWriter, r *http.Request) {
