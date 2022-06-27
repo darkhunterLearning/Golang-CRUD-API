@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 )
@@ -58,6 +59,9 @@ func main() {
 	// Get all customers
 	router.HandleFunc("/customers/", GetCustomers).Methods("GET")
 
+	// Get a specific customer by the ID
+	router.HandleFunc("/customer/{id}", GetCustomer).Methods("GET")
+
 	// Create a customer
 	router.HandleFunc("/customer/", CreateCustomer).Methods("POST")
 
@@ -69,7 +73,8 @@ func main() {
 
 	// Delete all customers
 	router.HandleFunc("/customers/", DeleteCustomers).Methods("DELETE")
-
+	u_id := uuid.New()
+	fmt.Println(u_id.String())
 	// serve the app
 	fmt.Println("Server at 8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
@@ -90,13 +95,57 @@ func checkErr(err error) {
 	}
 }
 
+func GetCustomer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	ID := vars["id"]
+	// var response = JsonResponse{}
+	db := setupDB()
+
+	printMessage("Getting customer by id...")
+
+	// Get all customers from customer table
+	rows, err := db.Query("SELECT * FROM customer WHERE id = $1;", ID)
+
+	// check errors
+	checkErr(err)
+
+	// var response []JsonResponse
+	var customers []Customer
+
+	// Foreach customer
+	for rows.Next() {
+		var (
+			id               int
+			uniqueID         string
+			customerName     string
+			customerPhone    string
+			customerAddress  string
+			customerPassword string
+		)
+
+		err = rows.Scan(&id, &uniqueID, &customerName, &customerPhone, &customerAddress, &customerPassword)
+
+		// check errors
+		checkErr(err)
+
+		customers = append(customers, Customer{CustomerID: id, CustomerUniqueId: uniqueID, CustomerName: customerName, CustomerPhone: customerPhone,
+
+			CustomerAddress: customerAddress, CustomerPassword: customerPassword})
+	}
+
+	var response = JsonResponse{Type: "success", Data: customers, Message: "200"}
+
+	json.NewEncoder(w).Encode(response)
+
+}
+
 // response and request handlers
 func GetCustomers(w http.ResponseWriter, r *http.Request) {
 	db := setupDB()
 
 	printMessage("Getting customers...")
 
-	// Get all movies from movies table that don't have movieID = "1"
+	// Get all customers from customer table
 	rows, err := db.Query("SELECT * FROM customer")
 
 	// check errors
@@ -105,7 +154,7 @@ func GetCustomers(w http.ResponseWriter, r *http.Request) {
 	// var response []JsonResponse
 	var customers []Customer
 
-	// Foreach movie
+	// Foreach customer
 	for rows.Next() {
 		var (
 			id               int
