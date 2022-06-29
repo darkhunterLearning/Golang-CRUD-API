@@ -1,4 +1,4 @@
-module example.com/m
+module github.com/darkhunterLearning/Golang-CRUD-API
 
 go 1.18
 
